@@ -1,91 +1,6 @@
 #include "DHE.h"
 #include <array>
 #include <cmath>
-
-static std::pair<double, double> calcM1andLWidth(ImageMat &mat)
-{
-	if (mat.getType() != ImageMat::BGR) throw std::runtime_error("Input Image Type must be BGR");
-
-	// Convert to L*a*b*
-	int cols = mat.getWidth();
-	int rows = mat.getHeight();
-	ImageMat tempImage = ImageMat(cols, rows, 3);
-	ImageMat::Byte *originData = mat.getRawData();
-	ImageMat::Byte *tempData = tempImage.getRawData();
-
-	auto f = [](double t) -> double {
-		if (t > 0.008856) {
-			return pow(t, 1 / 3.0);
-		}
-		else {
-			return 7.787 * t + 16 / 116;
-		}
-	};
-
-	for (int i = 0; i < rows; ++i) {
-		for (int j = 0; j < cols; ++j) {
-			ImageMat::Byte *originPix = originData + i * cols * 3 + j * 3;
-			ImageMat::Byte *outputPix = tempData + i * cols * 3 + j * 3;
-			ImageMat::Byte R = originPix[2];
-			ImageMat::Byte G = originPix[1];
-			ImageMat::Byte B = originPix[0];
-			// X
-			ImageMat::Byte X = (ImageMat::Byte) (0.412453 * R + 0.357580 * G + 0.180423 * B) / 0.950256;
-			// Y
-			ImageMat::Byte Y = (ImageMat::Byte) (0.212671 * R + 0.715160 * G + 0.072169 * B);
-			// Z
-			ImageMat::Byte Z = (ImageMat::Byte) (0.019334 * R + 0.119193 * G + 0.950277 * B) / 1.088754;
-
-			ImageMat::Byte L = Y > 0.008856 ? 116 * pow(Y, 1 / 3.0) - 16 : 903.3 * Y;
-
-			ImageMat::Byte a = 500 * (f(X) - f(Y)) + 128;
-
-			ImageMat::Byte b = 200 * (f(Y) - f(Z)) + 128;
-			L = L * 255 / 100;
-			//a += 128;
-			//b += 128;
-			outputPix[0] = L;
-			outputPix[1] = a;
-			outputPix[2] = b;
-		}
-	}
-
-	// Calculate M1
-	// Sigma and Mu
-	double sumA = 0;
-	double sumB = 0;
-	for (int i = 0; i < rows; ++i) {
-		for (int j = 0; j < cols; ++j) {
-			sumA += tempData[i * cols * 3 + j * 3 + 1];
-			sumB += tempData[i * cols * 3 + j * 3 + 2];
-		}
-	}
-	double mu_a = sumA / (cols * rows);
-	double mu_b = sumB / (cols * rows);
-	double sigma_a_square = 0;
-	double sigma_b_square = 0;
-	for (int i = 0; i < rows; ++i) {
-		for (int j = 0; j < cols; ++j) {
-			sigma_a_square += (tempData[i * cols * 3 + j * 3 + 1] - mu_a) * (tempData[i * cols * 3 + j * 3 + 1] - mu_a);
-			sigma_b_square += (tempData[i * cols * 3 + j * 3 + 2] - mu_b) * (tempData[i * cols * 3 + j * 3 + 2] - mu_b);
-		}
-	}
-	sigma_a_square = sigma_a_square / (cols * rows);
-	sigma_b_square = sigma_b_square / (cols * rows);
-	double sigma_ab = sqrt(sigma_a_square + sigma_b_square);
-
-	// Calculate L width
-	ImageMat::Byte min = tempData[0], max = tempData[0];
-	for (int i = 0; i < rows; ++i) {
-		for (int j = 0; j < cols; ++j) {
-			if (tempData[i * cols * 3 + j * 3] > max) max = tempData[i * cols * 3 + j * 3];
-			if (tempData[i * cols * 3 + j * 3] < min) min = tempData[i * cols * 3 + j * 3];
-		}
-	}
-
-	return std::make_pair(sigma_ab + 0.37 * (mu_a + mu_b) / 2, max - min);
-}
-
 static std::vector<uint8_t> dhe_helper(const ImageMat &origin, std::ostream& histogram, double beta)
 {
 	if (origin.getType() != ImageMat::HSI) throw std::runtime_error("Input Image Type must be HSI");
@@ -199,6 +114,90 @@ static std::vector<uint8_t> dhe_helper(const ImageMat &origin, std::ostream& his
 	}
 
 	return mapData;
+}
+
+std::pair<double, double> calcM1andLWidth(const ImageMat &mat)
+{
+	if (mat.getType() != ImageMat::BGR) throw std::runtime_error("Input Image Type must be BGR");
+
+	// Convert to L*a*b*
+	int cols = mat.getWidth();
+	int rows = mat.getHeight();
+	ImageMat tempImage = ImageMat(cols, rows, 3);
+	const ImageMat::Byte *originData = mat.getRawData();
+	ImageMat::Byte *tempData = tempImage.getRawData();
+
+	auto f = [](double t) -> double {
+		if (t > 0.008856) {
+			return pow(t, 1 / 3.0);
+		}
+		else {
+			return 7.787 * t + 16 / 116;
+		}
+	};
+
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			const ImageMat::Byte *originPix = originData + i * cols * 3 + j * 3;
+			ImageMat::Byte *outputPix = tempData + i * cols * 3 + j * 3;
+			ImageMat::Byte R = originPix[2];
+			ImageMat::Byte G = originPix[1];
+			ImageMat::Byte B = originPix[0];
+			// X
+			ImageMat::Byte X = (ImageMat::Byte) (0.412453 * R + 0.357580 * G + 0.180423 * B) / 0.950256;
+			// Y
+			ImageMat::Byte Y = (ImageMat::Byte) (0.212671 * R + 0.715160 * G + 0.072169 * B);
+			// Z
+			ImageMat::Byte Z = (ImageMat::Byte) (0.019334 * R + 0.119193 * G + 0.950277 * B) / 1.088754;
+
+			ImageMat::Byte L = Y > 0.008856 ? 116 * pow(Y, 1 / 3.0) - 16 : 903.3 * Y;
+
+			ImageMat::Byte a = 500 * (f(X) - f(Y)) + 128;
+
+			ImageMat::Byte b = 200 * (f(Y) - f(Z)) + 128;
+			L = L * 255 / 100;
+			//a += 128;
+			//b += 128;
+			outputPix[0] = L;
+			outputPix[1] = a;
+			outputPix[2] = b;
+		}
+	}
+
+	// Calculate M1
+	// Sigma and Mu
+	double sumA = 0;
+	double sumB = 0;
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			sumA += tempData[i * cols * 3 + j * 3 + 1];
+			sumB += tempData[i * cols * 3 + j * 3 + 2];
+		}
+	}
+	double mu_a = sumA / (cols * rows);
+	double mu_b = sumB / (cols * rows);
+	double sigma_a_square = 0;
+	double sigma_b_square = 0;
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			sigma_a_square += (tempData[i * cols * 3 + j * 3 + 1] - mu_a) * (tempData[i * cols * 3 + j * 3 + 1] - mu_a);
+			sigma_b_square += (tempData[i * cols * 3 + j * 3 + 2] - mu_b) * (tempData[i * cols * 3 + j * 3 + 2] - mu_b);
+		}
+	}
+	sigma_a_square = sigma_a_square / (cols * rows);
+	sigma_b_square = sigma_b_square / (cols * rows);
+	double sigma_ab = sqrt(sigma_a_square + sigma_b_square);
+
+	// Calculate L width
+	ImageMat::Byte min = tempData[0], max = tempData[0];
+	for (int i = 0; i < rows; ++i) {
+		for (int j = 0; j < cols; ++j) {
+			if (tempData[i * cols * 3 + j * 3] > max) max = tempData[i * cols * 3 + j * 3];
+			if (tempData[i * cols * 3 + j * 3] < min) min = tempData[i * cols * 3 + j * 3];
+		}
+	}
+
+	return std::make_pair(sigma_ab + 0.37 * (mu_a + mu_b) / 2, max - min);
 }
 
 std::vector<ImageMat> diff_histogram_equalization(const ImageMat &origin, std::ostream& histogram, double beta)

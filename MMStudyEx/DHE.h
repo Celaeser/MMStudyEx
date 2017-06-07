@@ -17,3 +17,10 @@
 *								-The luminance image after histogram equalization
 */
 std::vector<ImageMat> diff_histogram_equalization(const ImageMat &origin, std::ostream& histogram, double beta = 0.6);
+
+/**
+*
+* @param mat				The Image
+* @return					M1 and L width values
+*/
+std::pair<double, double> calcM1andLWidth(const ImageMat &mat);
