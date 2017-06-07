@@ -9,7 +9,7 @@ class ImageMat {
 public:
     typedef double Byte;
     enum Type {
-    	BGR, YUV, YIQ, YCbCr, HSI, Lab, Gray
+    	BGR, YUV, YIQ, YCbCr, HSI, Gray
 	};
     
 private:

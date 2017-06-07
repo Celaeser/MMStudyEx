@@ -8,6 +8,7 @@
 #include <filesystem>
 #include "Image.h"
 #include "ImageProcess.h"
+#include "DHE.h"
 #include "getopt.h"
 
 #include <array>
@@ -17,7 +18,7 @@
 			  "-i path : Set image file path\n"\
 			  "-o path : Set path of output file after histogram equalization( default for outputImageX.bmp )\n"\
 			  "-t path : Set path of output text file of histogram( default for histogramX.txt )\n"\
-			  "-c color type(YUV \\ YCbCr \\ YIQ \\ HSI) : Set color type( default for YUV )\n"
+			  "-c color type(YUV \\ YCbCr \\ YIQ \\ HSI \\ HSI-DHE ) : Set color type( default for YUV )\n"
 
 int main(int argc, char* argv[])
 {
@@ -26,6 +27,7 @@ int main(int argc, char* argv[])
 	bool over = false;
 
 	ImageMat::Type colorType = ImageMat::Gray;
+	bool usingDHE = false;
 	std::string inputPath;
 	std::ostringstream outpoutPath;
 	std::ostringstream textPath;
@@ -79,6 +81,10 @@ int main(int argc, char* argv[])
 			else if (std::strcmp(optarg, "HSI") == 0) {
 				colorType = ImageMat::HSI;
 			}
+			else if (std::strcmp(optarg, "HSI-DHE") == 0) {
+				colorType = ImageMat::HSI; usingDHE;
+				usingDHE = true;
+			}
 			else{
 				std::cerr << "Can't do histogram equalization for type " << optarg << std::endl;
 				over = true;
@@ -114,9 +120,17 @@ int main(int argc, char* argv[])
 			image = cvtColor(image, colorType);
 		}
 
-		std::cout << "Histogram equalization processing..." << std::endl;
-		auto imageSet = histogram_equalization(image, histogramText);
+		std::vector<ImageMat> imageSet;
 
+		if (!usingDHE) {
+			std::cout << "Histogram equalization processing..." << std::endl;
+			imageSet = histogram_equalization(image, histogramText);
+
+		}
+		else {
+			std::cout << "Differencial Histogram equalization processing..." << std::endl;
+			imageSet = diff_histogram_equalization(image, histogramText);
+		}
 		std::cout << "Saving image file..." << std::endl;
 		imageSet[0].saveToBMP(outpoutPath.str());
 
